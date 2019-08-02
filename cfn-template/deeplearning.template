@@ -1,927 +1,332 @@
-{
-  "AWSTemplateFormatVersion" : "2010-09-09",
-  "Description" : "Launches a Deep Learning Cluster with one Master and variable number of Workers.",
-  "Parameters" : {
-    "KeyName" : {
-      "Description" : "Name of an existing Amazon EC2 KeyPair to enable SSH access to the instances",
-      "Type" : "AWS::EC2::KeyPair::KeyName"
-    },
-    "WorkerCount" : {
-      "Description" : "The number of worker instances (launches +1 instance for the Master).",
-      "Type" : "Number",
-      "MinValue" : "1",
-      "Default" : "1"
-    },
-    "InstanceType" : {
-      "Description" : "The EC2 instance type for workers.For GPUs choose g3.xx, p2.xx or p3.xx.",
-      "Type" : "String",
-      "Default" : "p3.2xlarge",
-      "AllowedValues" : [
-        "p2.16xlarge",
-        "p2.8xlarge",
-        "p2.xlarge",
-        "p3.2xlarge",
-        "p3.8xlarge",
-        "p3.16xlarge",
-        "g3.16xlarge",
-        "g3.8xlarge",
-        "g3.4xlarge",
-        "t2.small",
-        "t2.medium",
-        "t2.large",
-        "t2.xlarge",
-        "t2.2xlarge",
-        "m4.large",
-        "m4.xlarge",
-        "m4.2xlarge",
-        "m4.4xlarge",
-        "m4.10xlarge",
-        "m4.16xlarge",
-        "m3.medium",
-        "m3.large",
-        "m3.xlarge",
-        "m3.2xlarge",
-        "c4.large",
-        "c4.xlarge",
-        "c4.2xlarge",
-        "c4.4xlarge",
-        "c4.8xlarge",
-        "c3.large",
-        "c3.xlarge",
-        "c3.2xlarge",
-        "c3.4xlarge",
-        "c3.8xlarge",
-        "x1.16large",
-        "x1.32xlarge",
-        "r4.large",
-        "r4.xlarge",
-        "r4.2xlarge",
-        "r4.4xlarge",
-        "r4.8xlarge",
-        "r4.16xlarge",
-        "r3.large",
-        "r3.xlarge",
-        "r3.2xlarge",
-        "r3.4xlarge",
-        "r3.8xlarge",
-        "i2.xlarge",
-        "i2.2xlarge",
-        "i2.4xlarge",
-        "i2.8xlarge",
-        "d2.xlarge",
-        "d2.2xlarge",
-        "d2.4xlarge",
-        "d2.8xlarge",
-        "f1.2xlarge",
-        "f1.16xlarge"
-      ],
-      "ConstraintDescription" : "Must be a valid CPU optimized or GPU EC2 instance type."
-    },
-    "ImageType" : {
-       "Description" : "Linux Flavor(Amazon Linux or Ubuntu)",
-       "Type" : "String",
-       "Default" : "Ubuntu",
-       "AllowedValues" : [ "AmazonLinux", "Ubuntu", "AmazonLinux2" ],
-       "ConstraintDescription" : "Amazon Supported Image Type"
-     },
-    "SSHLocation": {
-      "Description": "Restrict SSH access to a valid CIDR range, this should be a valid CIDR IP address range that you want to allow access to your Master and Stack.",
-      "Type": "String",
-      "MinLength": "9",
-      "MaxLength": "18",
-      "AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
-      "ConstraintDescription": "Must be a valid CIDR range of the form x.x.x.x/x"
-    },
-    "EFSFileSystemId" :{
-      "Description": "Existing Amazon EFS File System Id or leave it blank to create a new EFS File System.",
-      "Type": "String",
-      "AllowedPattern": "(^fs-[0-9a-f]{8,8})$|()$",
-      "Default": "",
-      "ConstraintDescription" : "Should be a Valid EFS File System Id"
-    },
-    "EFSMountPoint" : {
-      "Description" : "The Linux mount point for the EFS volume",
-      "Type": "String",
-      "MinLength": "1",
-      "Default": "myEFSvolume"
-    }
-  },
-  "Conditions" : {
-    "CreateNewFileSystem" : { "Fn::Equals" : [{"Ref": "EFSFileSystemId"}, ""] }
-  },
-  "Mappings" : {
-    "AmazonLinux" : {
-      "us-east-1"           : { "AMI" : "ami-06e441c14766d8bb7"  },
-      "us-west-2"           : { "AMI" : "ami-09dc0f04371b9015c"  },
-      "eu-west-1"           : { "AMI" : "ami-0391051b612d94119"  },
-      "us-east-2"           : { "AMI" : "ami-01b553f168b592fa6"  },
-      "ap-southeast-2"      : { "AMI" : "ami-0694846cea22641fa"  },
-      "ap-northeast-1"      : { "AMI" : "ami-0ffadd90637ca22fe"  },
-      "ap-northeast-2"      : { "AMI" : "ami-0766089ea491cf414"  },
-      "ap-south-1"          : { "AMI" : "ami-00d989679386e538a"  },
-      "eu-central-1"        : { "AMI" : "ami-089358b3da6435bef"  },
-      "ap-southeast-1"      : { "AMI" : "ami-0b56e4981cb06a654"  },
-      "us-west-1"           : { "AMI" : "ami-0cb4f7ffc50bf154c"  }
-    },
-    "Ubuntu" : {
-      "us-east-1"           : { "AMI" : "ami-0bc213dc857866046"  },
-      "us-west-2"           : { "AMI" : "ami-058f26d848e91a4e8"  },
-      "eu-west-1"           : { "AMI" : "ami-0952d56368dc0e8fc"  },
-      "us-east-2"           : { "AMI" : "ami-0821a34583de81474"  },
-      "ap-southeast-2"      : { "AMI" : "ami-0726ab58f406b644f"  },
-      "ap-northeast-1"      : { "AMI" : "ami-0b9b8c48e0aab227d"  },
-      "ap-northeast-2"      : { "AMI" : "ami-04b8a1d69180f5409"  },
-      "ap-south-1"          : { "AMI" : "ami-0f144862e40d89793"  },
-      "eu-central-1"        : { "AMI" : "ami-0370c62c0ebcc7924"  },
-      "ap-southeast-1"      : { "AMI" : "ami-0b5d996cccccdc6f8"  },
-      "us-west-1"           : { "AMI" : "ami-09c2435df1137686f"  }
-    },
-    "AmazonLinux2": {
-      "us-east-1"           : { "AMI" : "ami-0a52f8058317f5b35"  },
-      "us-west-2"           : { "AMI" : "ami-021cf66bae43c255e"  },
-      "eu-west-1"           : { "AMI" : "ami-0afe5b20a80769f23"  },
-      "us-east-2"           : { "AMI" : "ami-08d9dd1694c48586b"  },
-      "ap-southeast-2"      : { "AMI" : "ami-06b6e20b7df86b6c2"  },
-      "ap-northeast-1"      : { "AMI" : "ami-0f408ae12eb826ba4"  },
-      "ap-northeast-2"      : { "AMI" : "ami-084fbfbf9a2262854"  },
-      "ap-south-1"          : { "AMI" : "ami-04d85f3257a637d1a"  },
-      "eu-central-1"        : { "AMI" : "ami-0bf28bea6ea6d8917"  },
-      "ap-southeast-1"      : { "AMI" : "ami-094624284219b753e"  },
-      "us-west-1"           : { "AMI" : "ami-044df34469c2b72dd"  }
-    },
-    "SubnetConfig" : {
-      "VPC"     : { "CIDR" : "10.0.0.0/16" },
-      "Public"  : { "CIDR" : "10.0.0.0/24" },
-      "Private" : { "CIDR" : "10.0.1.0/24" }
-    },
-    "S3" : {
-      "us-east-1"           : { "URL" : "https://s3.amazonaws.com/" },
-      "us-west-2"           : { "URL" : "https://s3-us-west-2.amazonaws.com/" },
-      "eu-west-1"           : { "URL" : "https://s3-eu-west-1.amazonaws.com/" },
-      "us-east-2"           : { "URL" : "https://s3-us-east-2.amazonaws.com/" },
-      "ap-southeast-2"      : { "URL" : "https://s3-ap-southeast-2.amazonaws.com/" },
-      "ap-northeast-1"      : { "URL" : "https://s3-ap-northeast-1.amazonaws.com/" },
-      "ap-northeast-2"      : { "URL" : "https://s3-ap-northeast-2.amazonaws.com/" },
-      "ap-south-1"          : { "URL" : "https://s3-ap-south-1.amazonaws.com/" },
-      "eu-central-1"        : { "URL" : "https://s3-eu-central-1.amazonaws.com/" },
-      "ap-southeast-1"      : { "URL" : "https://s3-ap-southeast-1.amazonaws.com/" },
-      "us-west-1"           : { "URL" : "https://s3-us-west-1.amazonaws.com/"  }
-    },
-    "Other" : {
-      "S3SourceBucket" : { "BucketNameSuffix" : "-aws-dl-cfn" },
-      "Setup" : { "Filename" : "dl_cfn_setup_v2.py" },
-      "LambdaFunction" : { "FileName": "dl_cfn_setup_lambda.zip" },
-      "TimeoutValues" : { "WaitConditionTimeout" : "3300", "MasterLaunchTimeout" : "600"},
-      "DefaultUser" : {"AmazonLinux": "ec2-user", "Ubuntu": "ubuntu", "AmazonLinux2": "ec2-user"},
-      "CfnPath" : {"AmazonLinux": "/opt/aws/bin", "Ubuntu": "/usr/local/bin", "AmazonLinux2": "/opt/aws/bin"}
-    }
-  },
-  "Resources" : {
-    "ResourceMetadataLambdaFunction": {
-      "Type": "AWS::Lambda::Function",
-      "DependsOn" : ["MasterQueue"],
-      "Properties": {
-        "Handler": "lambda_function.lambda_handler",
-        "Role": { "Fn::GetAtt" : ["LambdaExecutionRole", "Arn"] },
-        "Code": {
-            "S3Bucket":  {"Fn::Join" : ["", [{ "Ref" : "AWS::Region" }, { "Fn::FindInMap" : [ "Other", "S3SourceBucket", "BucketNameSuffix" ]} ] ]},
-            "S3Key": { "Fn::FindInMap" : [ "Other", "LambdaFunction", "FileName" ]}
-          },
-          "MemorySize" : "256",
-          "Timeout": "60",
-          "Runtime": "python2.7",
-          "Environment" : {
-            "Variables": {  "AWS_DL_STACK_ID" : { "Ref" : "AWS::StackName" },
-                            "AWS_DL_MASTER_SQS_URL" : {"Ref" : "MasterQueue"}
-             }
-          }
-        }
-    },
-    "LambdaExecutionRole": {
-      "Type": "AWS::IAM::Role",
-      "DependsOn" : ["MasterQueue"],
-      "Properties": {
-        "ManagedPolicyArns": ["arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"],
-        "AssumeRolePolicyDocument": {
-        "Version": "2012-10-17",
-        "Statement": [{
-          "Effect": "Allow",
-          "Principal": {"Service": ["lambda.amazonaws.com"]},
-          "Action": ["sts:AssumeRole"]
-        }]
-      },
-      "Path": "/",
-      "Policies": [
-      { "PolicyName": "AWSDeepLearningLambdaExecutionRole",
-        "PolicyDocument": {
-          "Version": "2012-10-17",
-          "Statement": [{
-            "Effect": "Allow",
-              "Action" : [ "autoscaling:DescribeAutoScalingGroups", "autoscaling:SetDesiredCapacity",
-                          "autoscaling:SuspendProcesses",
-                          "cloudformation:DescribeStackResource", "cloudformation:SignalResource"
-                          ],
-            "Resource": "*"
-          }]
-        }
-      },
-      {
-        "PolicyName": "AllowLambdaSQSSend",
-        "PolicyDocument": {
-          "Version": "2012-10-17",
-          "Statement": [{
-            "Effect": "Allow",
-              "Action" : [
-                          "sqs:sendmessage"
-                          ],
-              "Resource" : { "Fn::GetAtt" : [ "MasterQueue", "Arn" ] }
-          }]
-        }
-      }
-      ]
-      }
-    },
-    "PermissionForSNSToInvokeLambda": {
-      "Type": "AWS::Lambda::Permission",
-      "Properties": {
-        "FunctionName": {
-          "Fn::GetAtt": ["ResourceMetadataLambdaFunction", "Arn"]
-        },
-        "Action": "lambda:InvokeFunction",
-        "Principal": "sns.amazonaws.com",
-        "SourceArn": {
-          "Ref" : "ResourceMetadataSNSTopic"
-        }
-      }
-    },
-    "InstanceRole" : {
-      "Type" : "AWS::IAM::Role",
-      "Properties" : {
-        "RoleName" : {"Fn::Join" : ["", [{ "Ref" : "AWS::StackName" }, "-InstanceRole" ] ] },
-        "AssumeRolePolicyDocument" : {
-          "Statement" : [ {
-            "Effect" : "Allow",
-            "Principal" : {
-              "Service" : [ "ec2.amazonaws.com" ]
-            },
-            "Action" : [ "sts:AssumeRole" ]
-          } ]
-        },
-        "Path" : "/",
-        "Policies" : [ {
-          "PolicyName" : "instance",
-          "PolicyDocument" : {
-            "Statement" : [ {
-              "Effect" : "Allow",
-              "Action" : [ "autoscaling:DescribeAutoScalingGroups", "autoscaling:DescribeAutoScalingInstances", "ec2:DescribeInstances", "cloudformation:DescribeStackResource"],
-              "Resource" : "*"
-            } ]
-            }
-          },
-          {
-          "PolicyName" : "allow-sqs-receive-send-delete-master",
-          "PolicyDocument" : {
-            "Statement" : [ {
-              "Effect" : "Allow",
-              "Action" : [ "sqs:DeleteMessage", "sqs:ReceiveMessage", "sqs:SendMessage", "sqs:GetQueueUrl"],
-              "Resource" : { "Fn::GetAtt" : [ "MasterQueue", "Arn" ] }
-            } ]
-          }
-        },
-        {
-        "PolicyName" : "allow-sqs-receive-send-delete-worker",
-        "PolicyDocument" : {
-          "Statement" : [ {
-            "Effect" : "Allow",
-            "Action" : [ "sqs:DeleteMessage", "sqs:ReceiveMessage", "sqs:SendMessage", "sqs:GetQueueUrl"],
-            "Resource" : { "Fn::GetAtt" : [ "WorkerQueue", "Arn" ] }
-          } ]
-          }
-        },
-        {
-        "PolicyName" : "allow-to-send-signal-to-WaitConditionHandle",
-        "PolicyDocument" : {
-          "Statement" : [ {
-            "Effect" : "Allow",
-            "Action" : [ "s3:*"],
-            "Resource" : {"Fn::Join" : ["", ["arn:aws:s3:::", "cloudformation-waitcondition-", { "Ref" : "AWS::Region" }, "/*" ] ] }
-          } ]
-          }
-        }
-      ]
-      }
-    },
-    "InstanceProfile" : {
-      "Type" : "AWS::IAM::InstanceProfile",
-      "DependsOn" : "InstanceRole",
-      "Properties" : {
-        "Path" : "/",
-        "Roles" : [ {
-          "Ref" : "InstanceRole"
-        } ]
-      }
-    },
-    "AdminSSHSecurityGroup" : {
-      "Type" : "AWS::EC2::SecurityGroup",
-      "Properties" : {
-        "GroupDescription" : "Security group that controls SSH access to the Master instance.",
-        "VpcId" : { "Ref" : "Vpc" },
-          "Tags" : [
-            { "Key" : "Name", "Value" : {"Fn::Join" : ["", [{ "Ref" : "AWS::StackName" }, "_SSH" ] ] } }
-          ],
-        "SecurityGroupIngress" : [
-            { "IpProtocol" : "tcp", "FromPort" : "22",  "ToPort" : "22",  "CidrIp" : { "Ref" : "SSHLocation" } }
-          ],
-        "SecurityGroupEgress" : [
-         ]
-      }
-    },
-    "MasterSecurityGroup" : {
-      "Type" : "AWS::EC2::SecurityGroup",
-      "Properties" : {
-        "GroupDescription" : "Enable Port access to and from the Master on the Private Interface.",
-        "VpcId" : { "Ref" : "Vpc" },
-          "Tags" : [
-            { "Key" : "Name", "Value" : {"Fn::Join" : ["", [{ "Ref" : "AWS::StackName" }, "_Master" ] ] } }
-          ],
-        "SecurityGroupIngress" : [
-          ],
-        "SecurityGroupEgress" : [
-         ]
-      }
-    },
-    "MasterSecurityIngress1" : {
-      "Type" : "AWS::EC2::SecurityGroupIngress",
-      "DependsOn" : ["MasterSecurityGroup"],
-      "Properties" : {
-        "GroupId" : { "Fn::GetAtt": [ "MasterSecurityGroup", "GroupId" ] },
-         "IpProtocol" : "tcp",
-         "FromPort" : "0",
-         "ToPort" : "65535",
-         "SourceSecurityGroupId" :  { "Fn::GetAtt": [ "MasterSecurityGroup", "GroupId" ] }
-      }
-    },
-    "MasterSecurityIngress2" : {
-      "Type" : "AWS::EC2::SecurityGroupIngress",
-      "DependsOn" : ["MasterSecurityGroup", "WorkerSecurityGroup"],
-      "Properties" : {
-        "GroupId" : { "Fn::GetAtt": [ "MasterSecurityGroup", "GroupId" ] },
-         "IpProtocol" : "icmp",
-         "FromPort" : "-1",
-         "ToPort" : "-1",
-         "SourceSecurityGroupId" :  { "Fn::GetAtt": [ "MasterSecurityGroup", "GroupId" ] }
-      }
-    },
-    "MasterSecurityIngress3" : {
-      "Type" : "AWS::EC2::SecurityGroupIngress",
-      "DependsOn" : ["MasterSecurityGroup", "WorkerSecurityGroup"],
-      "Properties" : {
-        "GroupId" : { "Fn::GetAtt": [ "MasterSecurityGroup", "GroupId" ] },
-         "IpProtocol" : "tcp",
-         "FromPort" : "0",
-         "ToPort" : "65535",
-         "SourceSecurityGroupId" :  { "Fn::GetAtt": [ "WorkerSecurityGroup", "GroupId" ] }
-      }
-    },
-    "MasterSecurityIngress4" : {
-      "Type" : "AWS::EC2::SecurityGroupIngress",
-      "DependsOn" : ["MasterSecurityGroup", "WorkerSecurityGroup"],
-      "Properties" : {
-        "GroupId" : { "Fn::GetAtt": [ "MasterSecurityGroup", "GroupId" ] },
-         "IpProtocol" : "icmp",
-         "FromPort" : "-1",
-         "ToPort" : "-1",
-         "SourceSecurityGroupId" :  { "Fn::GetAtt": [ "WorkerSecurityGroup", "GroupId" ] }
-      }
-    },
-    "WorkerSecurityGroup" : {
-      "Type" : "AWS::EC2::SecurityGroup",
-      "DependsOn" : ["MasterSecurityGroup"],
-      "Properties" : {
-        "GroupDescription" : "Enable Port access to and from the Worker on the Private Interface",
-        "VpcId" : { "Ref" : "Vpc" },
-          "Tags" : [
-            { "Key" : "Name", "Value" : {"Fn::Join" : ["", [{ "Ref" : "AWS::StackName" }, "_Worker"] ]} }
-          ],
-        "SecurityGroupIngress" : [
-            { "IpProtocol" : "tcp", "FromPort" : "0", "ToPort" : "65535", "SourceSecurityGroupId" : { "Ref" : "MasterSecurityGroup" } },
-            { "IpProtocol" : "icmp", "FromPort" : "-1", "ToPort" : "-1", "SourceSecurityGroupId" : { "Ref" : "MasterSecurityGroup" } }
-          ],
-        "SecurityGroupEgress" : [
-        ]
-      }
-    },
-    "WorkerSecurityIngress3" : {
-      "Type" : "AWS::EC2::SecurityGroupIngress",
-      "DependsOn" : ["WorkerSecurityGroup"],
-      "Properties" : {
-        "GroupId" : { "Fn::GetAtt": [ "WorkerSecurityGroup", "GroupId" ] },
-         "IpProtocol" : "tcp",
-         "FromPort" : "0",
-         "ToPort" : "65535",
-         "SourceSecurityGroupId" :  { "Fn::GetAtt": [ "WorkerSecurityGroup", "GroupId" ] }
-      }
-    },
-    "WorkerSecurityIngress4" : {
-      "Type" : "AWS::EC2::SecurityGroupIngress",
-      "DependsOn" : ["WorkerSecurityGroup"],
-      "Properties" : {
-        "GroupId" : { "Fn::GetAtt": [ "WorkerSecurityGroup", "GroupId" ] },
-         "IpProtocol" : "icmp",
-         "FromPort" : "-1",
-         "ToPort" : "-1",
-         "SourceSecurityGroupId" :  { "Fn::GetAtt": [ "WorkerSecurityGroup", "GroupId" ] }
-      }
-    },
-    "MountTargetSecurityGroup" : {
-      "Type" : "AWS::EC2::SecurityGroup",
-      "DependsOn" : ["MasterSecurityGroup", "WorkerSecurityGroup"],
-      "Properties" : {
-        "GroupDescription": "Security group for mount target",
-        "VpcId" : { "Ref" : "Vpc" },
-          "Tags" : [
-            { "Key" : "Name", "Value" : {"Fn::Join" : ["", [{ "Ref" : "AWS::StackName" }, "_Master" ] ] } }
-          ],
-        "SecurityGroupIngress" : [
-            { "IpProtocol" : "tcp", "FromPort" : "2049", "ToPort" : "2049", "SourceSecurityGroupId" : { "Ref" : "MasterSecurityGroup" } },
-            { "IpProtocol" : "tcp", "FromPort" : "2049", "ToPort" : "2049", "SourceSecurityGroupId" : { "Ref" : "WorkerSecurityGroup" } }
-          ],
-        "SecurityGroupEgress" : [
-         ]
-      }
-    },
-    "FileSystem": {
-      "Type": "AWS::EFS::FileSystem",
-      "Condition": "CreateNewFileSystem",
-      "DeletionPolicy": "Retain",
-      "Properties": {
-        "PerformanceMode": "generalPurpose",
-        "FileSystemTags": [
-          {
-            "Key": "Name",
-            "Value": { "Ref" : "AWS::StackName" }
-          }
-        ]
-      }
-    },
-    "MountTarget": {
-      "Type": "AWS::EFS::MountTarget",
-      "Properties": {
-        "FileSystemId": { "Fn::If" : [ "CreateNewFileSystem", {"Ref" : "FileSystem"}, {"Ref" : "EFSFileSystemId"} ] },
-        "SubnetId" : { "Ref" : "PrivateSubnet" },
-        "SecurityGroups": [ { "Ref": "MountTargetSecurityGroup" } ]
-      }
-    },
-    "WorkerLaunchConfig" : {
-      "Type" : "AWS::AutoScaling::LaunchConfiguration",
-      "Properties" : {
-        "ImageId" : {
-          "Fn::FindInMap" : [ {"Ref" : "ImageType" }, { "Ref" : "AWS::Region" }, "AMI" ]
-        },
-        "InstanceType" : {
-          "Ref" : "InstanceType"
-        },
-        "IamInstanceProfile" : {
-          "Ref" : "InstanceProfile"
-        },
-        "SecurityGroups" : [
-          {"Ref" : "WorkerSecurityGroup"}
-        ],
-        "UserData" : {
-          "Fn::Base64" : {
-            "Fn::Join" : [ "",
-              [
-                "#!/bin/bash -xe",
-                "\n",
+---
+AWSTemplateFormatVersion: 2010-09-09
+Description: Amazon EKS - Node Group
 
-                "# setup ssh-forwarding. ",
-                "sed -i \"s/^#\\(\\s\\+\\)ForwardAgent\\(\\s\\+\\)no/\\ \\1ForwardAgent\\2yes/g\" /etc/ssh/ssh_config",
-                "\n",
+Parameters:
 
-                "mkdir -p /opt/deeplearning",
-                "\n",
+  KeyName:
+    Description: The EC2 Key Pair to allow SSH access to the instances
+    Type: AWS::EC2::KeyPair::KeyName
 
-                "# run cfn-init. \n",
-                { "Fn::FindInMap" : [ "Other", "CfnPath", {"Ref" : "ImageType" } ]},
-                "\\/cfn-init -v --region ", { "Ref" : "AWS::Region" },
-                " --configsets Setup ",
-                " -s ",
-                { "Ref" : "AWS::StackId" },
-                " -r WorkerLaunchConfig ",
-                "\n",
-                ""
-              ]
-            ]
-          }
-        },
-        "KeyName" : {
-          "Ref" : "KeyName"
-        }
-      },
-      "Metadata" : {
-        "AWS::CloudFormation::Init" : {
-          "configSets" : {"Setup" : ["efs-config", "download-setup", "deeplearning-config" ] },
-          "efs-config" : {
-              "commands" : {
-                "00_install_nfs" : {
-                  "command" : {"Fn::Join" : [ "", [      "if [ \"AmazonLinux\" = \"", { "Ref" : "ImageType" }, "\" ] ", "||", " [ \"AmazonLinux2\" = \"", { "Ref" : "ImageType" }, "\" ];", "then yum -y -q install nfs-utils; else apt-get -qq -y install nfs-common ; fi"     ]]}
-                },
-                "01_createdir" : {
-                  "command" : {"Fn::Join" : [ "", [ "mkdir -p /", { "Ref" : "EFSMountPoint" }]]}
-                },
-                "02_mount" : {
-                  "command" : {"Fn::Join" : [ "", [ "sudo mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 ", {"Fn::If" : [ "CreateNewFileSystem", {"Ref" : "FileSystem"}, {"Ref" : "EFSFileSystemId"} ]}, ".efs.", { "Ref" : "AWS::Region" }, ".amazonaws.com:/ /", {"Ref": "EFSMountPoint"} ]]}
-                },
-                "03_permissions" : {
-                  "command" : {"Fn::Join" : [ "", [ "chown ",{ "Fn::FindInMap" : [ "Other", "DefaultUser", {"Ref" : "ImageType" } ]}, ":", { "Fn::FindInMap" : [ "Other", "DefaultUser", {"Ref" : "ImageType" } ]}, " /", { "Ref" : "EFSMountPoint" }]]}
-                }
-              }
-          },
-          "download-setup" :{
-            "files" : {
-                "/opt/deeplearning/dl_cfn_setup_v2.py":
-                { "source" : { "Fn::Join" : [ "", [ {"Fn::FindInMap" : [ "S3", { "Ref" : "AWS::Region" }, "URL" ]}, {"Fn::Join" : ["", [{ "Ref" : "AWS::Region" }, { "Fn::FindInMap" : [ "Other", "S3SourceBucket", "BucketNameSuffix" ]} ] ]}, "/", { "Fn::FindInMap" : [ "Other", "Setup", "Filename" ]} ] ] } }
-            }
-          },
-          "deeplearning-config" : {
-            "commands" : {
-              "01_setup" : {
-                  "command" : "python /opt/deeplearning/dl_cfn_setup_v2.py | tee -a /var/log/cloud-init-output.log",
-                  "cwd" : "/opt/deeplearning",
-                  "env" : { "AWS_DL_NODE_TYPE" : "Worker",
-                            "AWS_DL_MASTER_QUEUE": { "Fn::GetAtt" : [ "MasterQueue", "QueueName" ] },
-                            "AWS_DL_WORKER_QUEUE": { "Fn::GetAtt" : [ "WorkerQueue", "QueueName" ] },
-                            "AWS_DL_WAITCONDITION_TIMEOUT" : { "Fn::FindInMap" : [ "Other", "TimeoutValues", "WaitConditionTimeout" ]},
-                            "AWS_DL_MASTERLAUNCH_TIMEOUT" : { "Fn::FindInMap" : [ "Other", "TimeoutValues", "MasterLaunchTimeout" ]},
-                            "AWS_DL_STACK_ID" : { "Ref" : "AWS::StackId" },
-                            "AWS_DL_WAIT_HANDLE" : { "Ref" : "myWaitHandle" },
-                            "AWS_DL_ROLE_NAME" : {"Fn::Join" : ["", [{ "Ref" : "AWS::StackName" }, "-InstanceRole" ] ] },
-                            "AWS_DL_DEFAULT_USER" : { "Fn::FindInMap" : [ "Other", "DefaultUser", {"Ref" : "ImageType" } ]},
-                            "AWS_REGION" : { "Ref" : "AWS::Region" },
-                            "EFS_MOUNT" : {"Fn::Join" : ["", ["/", { "Ref" : "EFSMountPoint" } ] ] },
-                            "CFN_PATH" : { "Fn::FindInMap" : [ "Other", "CfnPath", {"Ref" : "ImageType" } ]}
-                  }
-              }
-            }
-          }
-        }
-      }
-    },
-    "MasterLaunchConfig" : {
-      "Type" : "AWS::AutoScaling::LaunchConfiguration",
-      "Properties" : {
-        "AssociatePublicIpAddress" : "true",
-        "ImageId" : {
-          "Fn::FindInMap" : [ {"Ref" : "ImageType" }, { "Ref" : "AWS::Region" }, "AMI" ]
-        },
-        "InstanceType" : {
-          "Ref" : "InstanceType"
-        },
-        "IamInstanceProfile" : {
-          "Ref" : "InstanceProfile"
-        },
-        "SecurityGroups" : [
-          { "Ref" : "MasterSecurityGroup" },
-          { "Ref" : "AdminSSHSecurityGroup" }
-        ],
-        "UserData" : {
-          "Fn::Base64" : {
-            "Fn::Join" : [ "",
-              [
-                "#!/bin/bash -xe",
-                "\n",
-                "# setup ssh-forwarding. \n",
-                "sed -i \"s/^#\\(\\s\\+\\)ForwardAgent\\(\\s\\+\\)no/\\ \\1ForwardAgent\\2yes/g\" /etc/ssh/ssh_config",
-                "\n",
+  NodeImageId:
+    Description: AMI id for the node instances.
+    Type: AWS::EC2::Image::Id
 
-                "mkdir -p /opt/deeplearning",
-                "\n",
+  NodeInstanceType:
+    Description: EC2 instance type for the node instances
+    Type: String
+    Default: t3.medium
+    ConstraintDescription: Must be a valid EC2 instance type
+    AllowedValues:
+      - t2.small
+      - t2.medium
+      - t2.large
+      - t2.xlarge
+      - t2.2xlarge
+      - t3.nano
+      - t3.micro
+      - t3.small
+      - t3.medium
+      - t3.large
+      - t3.xlarge
+      - t3.2xlarge
+      - m3.medium
+      - m3.large
+      - m3.xlarge
+      - m3.2xlarge
+      - m4.large
+      - m4.xlarge
+      - m4.2xlarge
+      - m4.4xlarge
+      - m4.10xlarge
+      - m5.large
+      - m5.xlarge
+      - m5.2xlarge
+      - m5.4xlarge
+      - m5.12xlarge
+      - m5.24xlarge
+      - c4.large
+      - c4.xlarge
+      - c4.2xlarge
+      - c4.4xlarge
+      - c4.8xlarge
+      - c5.large
+      - c5.xlarge
+      - c5.2xlarge
+      - c5.4xlarge
+      - c5.9xlarge
+      - c5.18xlarge
+      - i3.large
+      - i3.xlarge
+      - i3.2xlarge
+      - i3.4xlarge
+      - i3.8xlarge
+      - i3.16xlarge
+      - r3.xlarge
+      - r3.2xlarge
+      - r3.4xlarge
+      - r3.8xlarge
+      - r4.large
+      - r4.xlarge
+      - r4.2xlarge
+      - r4.4xlarge
+      - r4.8xlarge
+      - r4.16xlarge
+      - x1.16xlarge
+      - x1.32xlarge
+      - p2.xlarge
+      - p2.8xlarge
+      - p2.16xlarge
+      - p3.2xlarge
+      - p3.8xlarge
+      - p3.16xlarge
+      - p3dn.24xlarge
+      - r5.large
+      - r5.xlarge
+      - r5.2xlarge
+      - r5.4xlarge
+      - r5.12xlarge
+      - r5.24xlarge
+      - r5d.large
+      - r5d.xlarge
+      - r5d.2xlarge
+      - r5d.4xlarge
+      - r5d.12xlarge
+      - r5d.24xlarge
+      - z1d.large
+      - z1d.xlarge
+      - z1d.2xlarge
+      - z1d.3xlarge
+      - z1d.6xlarge
+      - z1d.12xlarge
 
-                "# run cfn-init. \n",
-                { "Fn::FindInMap" : [ "Other", "CfnPath", {"Ref" : "ImageType" } ]},
-                "\\/cfn-init -v --region ", { "Ref" : "AWS::Region" },
-                " --configsets Setup ",
-                " -s ",
-                { "Ref" : "AWS::StackId" },
-                " -r MasterLaunchConfig ",
-                "\n",
-                ""
-              ]
-            ]
-          }
-        },
-        "KeyName" : {
-          "Ref" : "KeyName"
-        }
-      },
-      "Metadata" : {
-        "AWS::CloudFormation::Init" : {
-          "configSets" : {"Setup" : ["efs-config", "download-setup", "deeplearning-config" ] },
-          "efs-config" : {
-              "commands" : {
-                "00_install_nfs" : {
-                  "command" : {"Fn::Join" : [ "", [      "if [ \"AmazonLinux\" = \"", { "Ref" : "ImageType" }, "\" ];", "then yum -y -q install nfs-utils; else apt-get -qq -y install nfs-common ; fi"     ]]}
-                },
-                "01_createdir" : {
-                  "command" : {"Fn::Join" : [ "", [ "mkdir -p /", { "Ref" : "EFSMountPoint" }]]}
-                },
-                "02_mount" : {
-                  "command" : {"Fn::Join" : [ "", [ "sudo mount -t nfs4 -o nfsvers=4.1,rsize=1048576,wsize=1048576,hard,timeo=600,retrans=2 ", { "Fn::If" : [ "CreateNewFileSystem", {"Ref" : "FileSystem"}, {"Ref" : "EFSFileSystemId"} ] }, ".efs.", { "Ref" : "AWS::Region" }, ".amazonaws.com:/ /", {"Ref": "EFSMountPoint"} ]]}
-                },
-                "03_permissions" : {
-                  "command" : {"Fn::Join" : [ "", [ "chown ",{ "Fn::FindInMap" : [ "Other", "DefaultUser", {"Ref" : "ImageType" } ]}, ":", { "Fn::FindInMap" : [ "Other", "DefaultUser", {"Ref" : "ImageType" } ]}, " /", { "Ref" : "EFSMountPoint" }]]}
-                }
-              }
-          },
-          "download-setup" :{
-            "files" : {
-                "/opt/deeplearning/dl_cfn_setup_v2.py":
-                { "source" : { "Fn::Join" : [ "", [ {"Fn::FindInMap" : [ "S3", { "Ref" : "AWS::Region" }, "URL" ]}, {"Fn::Join" : ["", [{ "Ref" : "AWS::Region" }, { "Fn::FindInMap" : [ "Other", "S3SourceBucket", "BucketNameSuffix" ]} ] ]}, "/", { "Fn::FindInMap" : [ "Other", "Setup", "Filename" ]} ] ] } }
-            }
-          },
-          "deeplearning-config" : {
-            "commands" : {
-              "01_setup" : {
-                  "command" : "python /opt/deeplearning/dl_cfn_setup_v2.py | tee -a /var/log/cloud-init-output.log",
-                  "cwd" : "/opt/deeplearning",
-                  "env" : { "AWS_DL_NODE_TYPE" : "Master",
-                            "AWS_DL_MASTER_QUEUE": { "Fn::GetAtt" : [ "MasterQueue", "QueueName" ] },
-                            "AWS_DL_WORKER_QUEUE": { "Fn::GetAtt" : [ "WorkerQueue", "QueueName" ] },
-                            "AWS_DL_WAITCONDITION_TIMEOUT" : { "Fn::FindInMap" : [ "Other", "TimeoutValues", "WaitConditionTimeout" ]},
-                            "AWS_DL_MASTERLAUNCH_TIMEOUT" : { "Fn::FindInMap" : [ "Other", "TimeoutValues", "MasterLaunchTimeout" ]},
-                            "AWS_DL_STACK_ID" : { "Ref" : "AWS::StackId" },
-                            "AWS_DL_WAIT_HANDLE" : { "Ref" : "myWaitHandle" },
-                            "AWS_DL_ROLE_NAME" : {"Fn::Join" : ["", [{ "Ref" : "AWS::StackName" }, "-InstanceRole" ] ] },
-                            "AWS_DL_DEFAULT_USER" : { "Fn::FindInMap" : [ "Other", "DefaultUser", {"Ref" : "ImageType" } ]},
-                            "AWS_REGION" : { "Ref" : "AWS::Region" },
-                            "EFS_MOUNT" : {"Fn::Join" : ["", ["/", { "Ref" : "EFSMountPoint" } ] ] },
-                            "CFN_PATH" : { "Fn::FindInMap" : [ "Other", "CfnPath", {"Ref" : "ImageType" } ]}
-                  }
-              }
-            }
-          }
-        }
-      }
-    },
-    "MasterAutoScalingGroup" : {
-      "Type" : "AWS::AutoScaling::AutoScalingGroup",
-      "DependsOn" : ["MasterLaunchConfig", "MountTarget", "MasterQueue", "WorkerQueue"],
-      "CreationPolicy" : {
-        "ResourceSignal" : {
-          "Timeout": {"Fn::Join" : ["", ["PT", { "Fn::FindInMap" : [ "Other", "TimeoutValues", "MasterLaunchTimeout" ]}, "S" ] ] },
-          "Count" : "1"
-        }
-      },
-      "Properties" : {
-        "DesiredCapacity" : "1",
-        "MinSize" : "1",
-        "MaxSize" : "1",
-        "LaunchConfigurationName" : { "Ref" : "MasterLaunchConfig"},
-        "VPCZoneIdentifier" : [{ "Ref" : "PublicSubnet"}],
-        "NotificationConfiguration" : {
-          "TopicARN" : {
-            "Ref" : "ResourceMetadataSNSTopic"
-          },
-          "NotificationTypes" : [ "autoscaling:EC2_INSTANCE_LAUNCH",
-                "autoscaling:EC2_INSTANCE_LAUNCH_ERROR",
-                "autoscaling:EC2_INSTANCE_TERMINATE_ERROR",
-                "autoscaling:EC2_INSTANCE_TERMINATE"
-            ]
-        },
-        "Tags" : [ {
-          "Key" : "Name",
-          "Value" : {
-            "Fn::Join" : ["", [{ "Ref" : "AWS::StackName" }, "-Master" ] ]
-          },
-          "PropagateAtLaunch" : true
-          },
-          {
-          "Key" : "NodeType",
-          "Value" : "Master",
-          "PropagateAtLaunch" : true
-          }
-        ]
-      }
-    },
-    "WorkerAutoScalingGroup" : {
-      "Type" : "AWS::AutoScaling::AutoScalingGroup",
-      "DependsOn" : ["WorkerLaunchConfig", "MountTarget", "MasterQueue", "WorkerQueue", "MasterAutoScalingGroup"],
-      "Properties" : {
-        "MinSize" : "0",
-        "MaxSize" : { "Ref" : "WorkerCount" },
-        "DesiredCapacity" : { "Ref" : "WorkerCount" },
-        "LaunchConfigurationName" : {
-          "Ref" : "WorkerLaunchConfig"
-        },
-        "VPCZoneIdentifier" : [ { "Ref" : "PrivateSubnet" } ],
-        "NotificationConfiguration" : {
-          "TopicARN" : {
-            "Ref" : "ResourceMetadataSNSTopic"
-          },
-          "NotificationTypes" : [
-            "autoscaling:EC2_INSTANCE_LAUNCH",
-            "autoscaling:EC2_INSTANCE_LAUNCH_ERROR",
-            "autoscaling:EC2_INSTANCE_TERMINATE_ERROR",
-            "autoscaling:EC2_INSTANCE_TERMINATE"
-            ]
-        },
-        "Tags" : [ {
-          "Key" : "Name",
-          "Value" : {
-            "Fn::Join" : ["", [{ "Ref" : "AWS::StackName" }, "-Worker" ] ]
-          },
-          "PropagateAtLaunch" : true
-          },
-          {
-          "Key" : "NodeType",
-          "Value" : "Worker",
-          "PropagateAtLaunch" : true
-          }
-        ]
-      }
-    },
-    "MasterQueue" : {
-      "Type" : "AWS::SQS::Queue",
-      "Properties" : {
-        "QueueName" : {"Fn::Join" : ["", [{ "Ref" : "AWS::StackName" }, "-aws-dl-cfn-master" ] ] }
-      }
-    },
-    "WorkerQueue" : {
-      "Type" : "AWS::SQS::Queue",
-      "Properties" : {
-        "QueueName" : {"Fn::Join" : ["", [{ "Ref" : "AWS::StackName" }, "-aws-dl-cfn-worker" ] ] }
-      }
-    },
-    "ResourceMetadataSNSTopic" : {
-      "Type" : "AWS::SNS::Topic",
-      "Properties" : {
-        "DisplayName" : {"Fn::Join" : ["", [{ "Ref" : "AWS::StackName" }, "-aws-dl-cfn" ] ] },
-        "Subscription" : [
-          {
-            "Endpoint" : {
-              "Fn::GetAtt" : [ "ResourceMetadataLambdaFunction", "Arn" ]
-            }, "Protocol" : "lambda"
-          }
-        ],
-        "TopicName" : {"Fn::Join" : ["", [{ "Ref" : "AWS::StackName" }, "-aws-dl-cfn" ] ] }
-      }
-    },
-    "myWaitHandle" : {
-        "Type" : "AWS::CloudFormation::WaitConditionHandle",
-        "Properties" : {
-        }
-    },
-    "myWaitCondition" : {
-        "Type" : "AWS::CloudFormation::WaitCondition",
-        "Properties" : {
-            "Handle" : { "Ref" : "myWaitHandle" },
-            "Timeout" : { "Fn::FindInMap" : [ "Other", "TimeoutValues", "WaitConditionTimeout" ]}
-        }
-    },
-    "NATGatewayEIP" : {
-      "Type" : "AWS::EC2::EIP",
-      "Properties" : {"Domain" : "vpc"}
-    },
-    "Vpc" : {
-      "Type" : "AWS::EC2::VPC",
-      "Properties" : {
-          "CidrBlock" : { "Fn::FindInMap" : [ "SubnetConfig", "VPC", "CIDR" ]},
-          "EnableDnsSupport" : "true",
-          "EnableDnsHostnames" : "true",
-          "Tags" : [
-            { "Key" : "Name", "Value" : { "Ref" : "AWS::StackName" } }
-          ]
-      }
-    },
-    "InternetGateway" : {
-      "Type" : "AWS::EC2::InternetGateway",
-      "Properties" : {
-        "Tags" : [
-          { "Key" : "Network", "Value" : "Public" },
-          { "Key" : "Name", "Value" : { "Ref" : "AWS::StackName" } }
-        ]
-      }
-    },
-    "GatewayToInternet" : {
-       "Type" : "AWS::EC2::VPCGatewayAttachment",
-       "Properties" : {
-         "VpcId" : { "Ref" : "Vpc" },
-         "InternetGatewayId" : { "Ref" : "InternetGateway" }
-       }
-    },
-    "PublicSubnet" : {
-      "Type" : "AWS::EC2::Subnet",
-      "DependsOn" : ["PrivateSubnet"],
-      "Properties" : {
-        "VpcId" : {"Ref" : "Vpc"},
-        "AvailabilityZone" : { "Fn::GetAtt" : [ "PrivateSubnet", "AvailabilityZone" ] } ,
-        "CidrBlock": { "Fn::FindInMap" : [ "SubnetConfig", "Public", "CIDR" ]},
-          "Tags" : [
-            { "Key" : "Network", "Value" : "Public" },
-            { "Key" : "Name", "Value" : { "Ref" : "AWS::StackName" } }
-          ]
-      }
-    },
-    "PrivateSubnet" : {
-      "Type" : "AWS::EC2::Subnet",
-      "Properties" : {
-          "VpcId" : { "Ref" : "Vpc" },
-          "CidrBlock" : { "Fn::FindInMap" : [ "SubnetConfig", "Private", "CIDR" ]},
-          "Tags" : [
-            { "Key" : "Network", "Value" : "Private" },
-            { "Key" : "Name", "Value" : { "Ref" : "AWS::StackName" }}
-          ]
-      }
-    },
-    "NATGateway" : {
-      "Type" : "AWS::EC2::NatGateway",
-      "DependsOn" : "GatewayToInternet",
-      "Properties" : {
-        "AllocationId" : {
-        "Fn::GetAtt" : [
-          "NATGatewayEIP",
-          "AllocationId"
-          ]
-        },
-      "SubnetId" : {
-        "Ref" : "PublicSubnet"
-        }
-      }
-    },
-    "PublicRouteTable" : {
-      "Type" : "AWS::EC2::RouteTable",
-      "DependsOn": "GatewayToInternet",
-      "Properties" : {
-        "VpcId" : { "Ref" : "Vpc" },
-        "Tags" : [
-          { "Key" : "Network", "Value" : "Public" },
-          { "Key" : "Name", "Value" : { "Ref" : "AWS::StackName" } }
-        ]
-      }
-    },
-    "PublicRoute" : {
-      "Type" : "AWS::EC2::Route",
-      "Properties" : {
-        "RouteTableId" : { "Ref" : "PublicRouteTable" },
-        "DestinationCidrBlock" : "0.0.0.0/0",
-        "GatewayId" : { "Ref" : "InternetGateway" }
-      }
-    },
-    "PublicSubnetRouteAssociation" : {
-      "Type" : "AWS::EC2::SubnetRouteTableAssociation",
-      "Properties" : {
-        "SubnetId" : { "Ref" : "PublicSubnet" },
-        "RouteTableId" : { "Ref" : "PublicRouteTable" }
-      }
-    },
-    "PrivateRouteTable" : {
-      "Type" : "AWS::EC2::RouteTable",
-      "Properties" : {
-        "VpcId" : { "Ref" : "Vpc" },
-        "Tags" : [
-          { "Key" : "Network", "Value" : "Private" },
-          { "Key" : "Name", "Value" : { "Ref" : "AWS::StackName" }}
-        ]
-      }
-    },
-    "PrivateRoute" : {
-      "Type" : "AWS::EC2::Route",
-      "Properties" : {
-        "RouteTableId" : { "Ref" : "PrivateRouteTable" },
-        "DestinationCidrBlock" : "0.0.0.0/0",
-        "NatGatewayId" : { "Ref" : "NATGateway" }
-      }
-    },
-    "PrivateSubnetRouteAssociation" : {
-      "Type" : "AWS::EC2::SubnetRouteTableAssociation",
-      "Properties" : {
-        "SubnetId" : { "Ref" : "PrivateSubnet" },
-        "RouteTableId" : { "Ref" : "PrivateRouteTable" }
-      }
-    }
-  },
-  "Outputs" : {
-    "AdminSSHSecurityGroup" : {
-      "Description" : "Security Group that restricts Inbound IPs to SSH into the Master",
-      "Value" : {
-        "Ref" : "AdminSSHSecurityGroup"
-      }
-    },
-    "MasterAutoScalingGroup" : {
-      "Description" : "Autoscaling Group that contains the Master Instance",
-      "Value" : {
-        "Ref" : "MasterAutoScalingGroup"
-      }
-    },
-    "WorkerAutoScalingGroup" : {
-      "Description" : "Autoscaling Group that contains the Workers",
-      "Value" : {
-        "Ref" : "WorkerAutoScalingGroup"
-      }
-    },
-    "MountTargetID" : {
-      "Description" : "EFS Mount target ID",
-      "Value" :  { "Ref" : "MountTarget" }
-    }
-  }
-}
+  NodeAutoScalingGroupMinSize:
+    Description: Minimum size of Node Group ASG.
+    Type: Number
+    Default: 1
+
+  NodeAutoScalingGroupMaxSize:
+    Description: Maximum size of Node Group ASG. Set to at least 1 greater than NodeAutoScalingGroupDesiredCapacity.
+    Type: Number
+    Default: 4
+
+  NodeAutoScalingGroupDesiredCapacity:
+    Description: Desired capacity of Node Group ASG.
+    Type: Number
+    Default: 3
+
+  NodeVolumeSize:
+    Description: Node volume size
+    Type: Number
+    Default: 20
+
+  ClusterName:
+    Description: The cluster name provided when the cluster was created. If it is incorrect, nodes will not be able to join the cluster.
+    Type: String
+
+  BootstrapArguments:
+    Description: Arguments to pass to the bootstrap script. See files/bootstrap.sh in https://github.com/awslabs/amazon-eks-ami
+    Type: String
+    Default: ""
+
+  NodeGroupName:
+    Description: Unique identifier for the Node Group.
+    Type: String
+
+  ClusterControlPlaneSecurityGroup:
+    Description: The security group of the cluster control plane.
+    Type: AWS::EC2::SecurityGroup::Id
+
+  VpcId:
+    Description: The VPC of the worker instances
+    Type: AWS::EC2::VPC::Id
+
+  Subnets:
+    Description: The subnets where workers can be created.
+    Type: List<AWS::EC2::Subnet::Id>
+
+Metadata:
+
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: EKS Cluster
+        Parameters:
+          - ClusterName
+          - ClusterControlPlaneSecurityGroup
+      - Label:
+          default: Worker Node Configuration
+        Parameters:
+          - NodeGroupName
+          - NodeAutoScalingGroupMinSize
+          - NodeAutoScalingGroupDesiredCapacity
+          - NodeAutoScalingGroupMaxSize
+          - NodeInstanceType
+          - NodeImageId
+          - NodeVolumeSize
+          - KeyName
+          - BootstrapArguments
+      - Label:
+          default: Worker Network Configuration
+        Parameters:
+          - VpcId
+          - Subnets
+
+Resources:
+
+  NodeInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: "/"
+      Roles:
+        - !Ref NodeInstanceRole
+
+  NodeInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: 2012-10-17
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: ec2.amazonaws.com
+            Action: sts:AssumeRole
+      Path: "/"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonEKSWorkerNodePolicy
+        - arn:aws:iam::aws:policy/AmazonEKS_CNI_Policy
+        - arn:aws:iam::aws:policy/AmazonEC2ContainerRegistryReadOnly
+
+  NodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Security group for all nodes in the cluster
+      VpcId: !Ref VpcId
+      Tags:
+        - Key: !Sub kubernetes.io/cluster/${ClusterName}
+          Value: owned
+
+  NodeSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: NodeSecurityGroup
+    Properties:
+      Description: Allow node to communicate with each other
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: -1
+      FromPort: 0
+      ToPort: 65535
+
+  NodeSecurityGroupFromControlPlaneIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: NodeSecurityGroup
+    Properties:
+      Description: Allow worker Kubelets and pods to receive communication from the cluster control plane
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref ClusterControlPlaneSecurityGroup
+      IpProtocol: tcp
+      FromPort: 1025
+      ToPort: 65535
+
+  ControlPlaneEgressToNodeSecurityGroup:
+    Type: AWS::EC2::SecurityGroupEgress
+    DependsOn: NodeSecurityGroup
+    Properties:
+      Description: Allow the cluster control plane to communicate with worker Kubelet and pods
+      GroupId: !Ref ClusterControlPlaneSecurityGroup
+      DestinationSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 1025
+      ToPort: 65535
+
+  NodeSecurityGroupFromControlPlaneOn443Ingress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: NodeSecurityGroup
+    Properties:
+      Description: Allow pods running extension API servers on port 443 to receive communication from cluster control plane
+      GroupId: !Ref NodeSecurityGroup
+      SourceSecurityGroupId: !Ref ClusterControlPlaneSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+
+  ControlPlaneEgressToNodeSecurityGroupOn443:
+    Type: AWS::EC2::SecurityGroupEgress
+    DependsOn: NodeSecurityGroup
+    Properties:
+      Description: Allow the cluster control plane to communicate with pods running extension API servers on port 443
+      GroupId: !Ref ClusterControlPlaneSecurityGroup
+      DestinationSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      FromPort: 443
+      ToPort: 443
+
+  ClusterControlPlaneSecurityGroupIngress:
+    Type: AWS::EC2::SecurityGroupIngress
+    DependsOn: NodeSecurityGroup
+    Properties:
+      Description: Allow pods to communicate with the cluster API Server
+      GroupId: !Ref ClusterControlPlaneSecurityGroup
+      SourceSecurityGroupId: !Ref NodeSecurityGroup
+      IpProtocol: tcp
+      ToPort: 443
+      FromPort: 443
+
+  NodeGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      DesiredCapacity: !Ref NodeAutoScalingGroupDesiredCapacity
+      LaunchConfigurationName: !Ref NodeLaunchConfig
+      MinSize: !Ref NodeAutoScalingGroupMinSize
+      MaxSize: !Ref NodeAutoScalingGroupMaxSize
+      VPCZoneIdentifier: !Ref Subnets
+      Tags:
+        - Key: Name
+          Value: !Sub ${ClusterName}-${NodeGroupName}-Node
+          PropagateAtLaunch: true
+        - Key: !Sub kubernetes.io/cluster/${ClusterName}
+          Value: owned
+          PropagateAtLaunch: true
+    UpdatePolicy:
+      AutoScalingRollingUpdate:
+        MaxBatchSize: 1
+        MinInstancesInService: !Ref NodeAutoScalingGroupDesiredCapacity
+        PauseTime: PT5M
+
+  NodeLaunchConfig:
+    Type: AWS::AutoScaling::LaunchConfiguration
+    Properties:
+      AssociatePublicIpAddress: true
+      IamInstanceProfile: !Ref NodeInstanceProfile
+      ImageId: !Ref NodeImageId
+      InstanceType: !Ref NodeInstanceType
+      KeyName: !Ref KeyName
+      SecurityGroups:
+        - !Ref NodeSecurityGroup
+      BlockDeviceMappings:
+        - DeviceName: /dev/xvda
+          Ebs:
+            VolumeSize: !Ref NodeVolumeSize
+            VolumeType: gp2
+            DeleteOnTermination: true
+      UserData:
+        Fn::Base64:
+          !Sub |
+            #!/bin/bash
+            set -o xtrace
+            /etc/eks/bootstrap.sh ${ClusterName} ${BootstrapArguments}
+            /opt/aws/bin/cfn-signal --exit-code $? \
+                     --stack  ${AWS::StackName} \
+                     --resource NodeGroup  \
+                     --region ${AWS::Region}
+
+Outputs:
+
+  NodeInstanceRole:
+    Description: The node instance role
+    Value: !GetAtt NodeInstanceRole.Arn
+
+  NodeSecurityGroup:
+    Description: The security group for the node group
+    Value: !Ref NodeSecurityGroup
+

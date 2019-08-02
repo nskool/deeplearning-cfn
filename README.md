@@ -9,6 +9,9 @@ With this template, we continue with our mission to make [distributed deep learn
 ## What's New?  
 We've updated the AWS CloudFormation Deep Learning template to add some exciting new features and capabilities.
 
+### Aug 1, 2019
+* Updated AWS DLAMI Conda version in CFN template file to v24.0. Check **[release notes](https://aws.amazon.com/releasenotes/?tag=releasenotes%23keywords%23aws-deep-learning-amis)** for details.
+
 ### May 16 2019
 * Updated AWS DLAMI Conda version in CFN template file to v23.0. Check **[release notes](https://aws.amazon.com/releasenotes/?tag=releasenotes%23keywords%23aws-deep-learning-amis)** for details.
 
